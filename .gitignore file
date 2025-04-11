@@ -1,0 +1,31 @@
+# Visual Studio / SQL Server files
+*.user
+*.suo
+*.sqlproj.user
+*.dbmdl
+*.jfm
+*.ldf
+*.mdf
+*.dacpac
+*.log
+*.bak
+*.sqlite
+*.dll
+*.exe
+.vs/
+bin/
+obj/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# User-specific files
+*.env
+**/local_settings.py
+**/appsettings.Development.json
