@@ -1,0 +1,6 @@
+CREATE INDEX IX_Members_Email ON Members(Email);
+CREATE INDEX IX_Books_ISBN ON Books(ISBN);
+CREATE INDEX IX_BookCopies_Status ON BookCopies(Status);
+CREATE INDEX IX_Loans_Status_DueDate ON Loans(Status, DueDate);
+CREATE INDEX IX_BookAuthors_AuthorID ON BookAuthors(AuthorID);
+CREATE INDEX IX_BookCategories_CategoryID ON BookCategories(CategoryID);
