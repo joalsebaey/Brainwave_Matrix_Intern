@@ -1,0 +1,178 @@
+# Database Schema Documentation
+
+## Entity Relationship Diagram
+
+[ER Diagram would be placed here]
+
+## Tables
+
+### Authors
+Stores information about book authors.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| AuthorID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the author |
+| FirstName | NVARCHAR(50) | NOT NULL | Author's first name |
+| LastName | NVARCHAR(50) | NOT NULL | Author's last name |
+| Biography | NVARCHAR(MAX) | | Author's biographical information |
+| DateOfBirth | DATE | | Author's date of birth |
+| Nationality | NVARCHAR(50) | | Author's nationality |
+
+### Publishers
+Stores information about book publishers.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| PublisherID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the publisher |
+| Name | NVARCHAR(100) | NOT NULL | Publisher name |
+| Address | NVARCHAR(MAX) | | Publisher address |
+| Phone | NVARCHAR(20) | | Publisher phone number |
+| Email | NVARCHAR(100) | | Publisher email |
+| Website | NVARCHAR(100) | | Publisher website |
+
+### Categories
+Stores book categories/genres.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| CategoryID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the category |
+| Name | NVARCHAR(50) | NOT NULL | Category name |
+| Description | NVARCHAR(MAX) | | Category description |
+
+### Books
+Stores information about books.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| BookID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the book |
+| ISBN | NVARCHAR(20) | UNIQUE, NOT NULL | International Standard Book Number |
+| Title | NVARCHAR(255) | NOT NULL | Book title |
+| PublisherID | INT | FOREIGN KEY | Reference to publisher |
+| PublicationDate | DATE | | Publication date |
+| Edition | NVARCHAR(20) | | Book edition |
+| Language | NVARCHAR(30) | | Book language |
+| Pages | INT | | Number of pages |
+| Description | NVARCHAR(MAX) | | Book description |
+| ShelfLocation | NVARCHAR(50) | | Physical location in library |
+| CoverImageURL | NVARCHAR(255) | | URL to cover image |
+| AddedDate | DATETIME | DEFAULT GETDATE() | Date book was added to library |
+| Status | NVARCHAR(20) | CHECK constraint | Current status |
+
+### BookAuthors
+Junction table connecting books to authors (many-to-many).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| BookID | INT | PRIMARY KEY, FOREIGN KEY | Reference to book |
+| AuthorID | INT | PRIMARY KEY, FOREIGN KEY | Reference to author |
+
+### BookCategories
+Junction table connecting books to categories (many-to-many).
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| BookID | INT | PRIMARY KEY, FOREIGN KEY | Reference to book |
+| CategoryID | INT | PRIMARY KEY, FOREIGN KEY | Reference to category |
+
+### Members
+Stores information about library members.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| MemberID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the member |
+| FirstName | NVARCHAR(50) | NOT NULL | Member's first name |
+| LastName | NVARCHAR(50) | NOT NULL | Member's last name |
+| Email | NVARCHAR(100) | UNIQUE, NOT NULL | Member's email address |
+| Phone | NVARCHAR(20) | | Member's phone number |
+| Address | NVARCHAR(MAX) | | Member's address |
+| DateOfBirth | DATE | | Member's date of birth |
+| MembershipDate | DATE | NOT NULL | Date membership started |
+| MembershipExpiry | DATE | | Date membership expires |
+| MembershipStatus | NVARCHAR(20) | CHECK constraint | Current membership status |
+
+### Staff
+Stores information about library staff.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| StaffID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for staff member |
+| FirstName | NVARCHAR(50) | NOT NULL | Staff's first name |
+| LastName | NVARCHAR(50) | NOT NULL | Staff's last name |
+| Email | NVARCHAR(100) | UNIQUE, NOT NULL | Staff's email address |
+| Phone | NVARCHAR(20) | | Staff's phone number |
+| Address | NVARCHAR(MAX) | | Staff's address |
+| Position | NVARCHAR(50) | NOT NULL | Staff position/title |
+| HireDate | DATE | NOT NULL | Date staff was hired |
+| Salary | DECIMAL(10, 2) | | Staff salary |
+| Username | NVARCHAR(50) | UNIQUE, NOT NULL | Login username |
+| PasswordHash | NVARCHAR(255) | NOT NULL | Hashed password |
+
+### Loans
+Tracks book loans to members.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| LoanID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the loan |
+| BookID | INT | NOT NULL, FOREIGN KEY | Reference to book |
+| MemberID | INT | NOT NULL, FOREIGN KEY | Reference to member |
+| StaffID | INT | FOREIGN KEY | Reference to staff who processed loan |
+| CheckoutDate | DATETIME | NOT NULL, DEFAULT GETDATE() | Date/time book was checked out |
+| DueDate | DATETIME | NOT NULL | Date/time book is due |
+| ReturnDate | DATETIME | NULL | Date/time book was returned |
+| Status | NVARCHAR(20) | CHECK constraint | Current loan status |
+
+### Reservations
+Tracks book reservations by members.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| ReservationID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the reservation |
+| BookID | INT | NOT NULL, FOREIGN KEY | Reference to book |
+| MemberID | INT | NOT NULL, FOREIGN KEY | Reference to member |
+| ReservationDate | DATETIME | NOT NULL, DEFAULT GETDATE() | Date/time book was reserved |
+| ExpiryDate | DATETIME | NOT NULL | Date/time reservation expires |
+| Status | NVARCHAR(20) | CHECK constraint | Current reservation status |
+
+### Fines
+Tracks fines for overdue books.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| FineID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the fine |
+| LoanID | INT | NOT NULL, FOREIGN KEY | Reference to loan |
+| MemberID | INT | NOT NULL, FOREIGN KEY | Reference to member |
+| Amount | DECIMAL(10, 2) | NOT NULL | Fine amount |
+| IssuedDate | DATETIME | NOT NULL, DEFAULT GETDATE() | Date/time fine was issued |
+| PaymentDate | DATETIME | NULL | Date/time fine was paid |
+| Status | NVARCHAR(20) | CHECK constraint | Current fine status |
+
+### BookCopies
+Tracks individual copies of books.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| CopyID | INT | PRIMARY KEY, IDENTITY(1,1) | Unique identifier for the book copy |
+| BookID | INT | NOT NULL, FOREIGN KEY | Reference to book |
+| AcquisitionDate | DATE | NOT NULL | Date copy was acquired |
+| Price | DECIMAL(10, 2) | | Purchase price |
+| Condition | NVARCHAR(20) | CHECK constraint | Physical condition |
+| Status | NVARCHAR(20) | CHECK constraint | Current status |
+
+## Views
+
+### AvailableBooks
+Shows books with available copies.
+
+### OverdueLoans
+Shows currently overdue loans with member information.
+
+## Triggers
+
+### AfterLoanInsert
+Updates book status when borrowed.
+
+### AfterLoanReturn
+Updates book status when returned.
+
+### CalculateOverdueFine
+Automatically calculates fines for overdue books.
