@@ -1,0 +1,118 @@
+# Stored Procedures Documentation
+
+## GetMemberLoanHistory
+
+Retrieves the complete loan history for a specific member.
+
+### Parameters
+- `@MemberID INT` - The ID of the member
+
+### Returns
+A result set containing:
+- LoanID
+- Book Title
+- ISBN
+- Author
+- CheckoutDate
+- DueDate
+- ReturnDate
+- Status
+- DaysOverdue (calculated)
+- FineAmount
+- FineStatus
+
+### Example Usage
+```sql
+EXEC GetMemberLoanHistory @MemberID = 1;
+```
+
+## GenerateOverdueNotices
+
+Updates the status of overdue loans and generates notification data for library staff.
+
+### Parameters
+None
+
+### Returns
+A result set containing:
+- MemberID
+- MemberName
+- Email
+- Phone
+- Book Title
+- CheckoutDate
+- DueDate
+- DaysOverdue
+- EstimatedFine
+
+### Example Usage
+```sql
+EXEC GenerateOverdueNotices;
+```
+
+## PayFine
+
+Processes a fine payment.
+
+### Parameters
+- `@FineID INT` - The ID of the fine to be paid
+- `@PaymentAmount DECIMAL(10, 2)` - The amount being paid
+
+### Returns
+Success or error message
+
+### Example Usage
+```sql
+EXEC PayFine @FineID = 1, @PaymentAmount = 10.00;
+```
+
+## GenerateLibraryStatistics
+
+Generates comprehensive statistics about the library system.
+
+### Parameters
+None
+
+### Returns
+Multiple result sets containing:
+1. Collection statistics
+   - TotalBooks
+   - TotalCopies
+   - AvailableCopies
+   - TotalCategories
+   - TotalAuthors
+
+2. Membership statistics
+   - TotalMembers
+   - ActiveMembers
+   - ExpiredMembers
+   - SuspendedMembers
+
+3. Loan statistics
+   - TotalLoans
+   - CurrentLoans
+   - OverdueLoans
+   - ReturnedLast30Days
+
+4. Fine statistics
+   - TotalFines
+   - PendingFines
+   - PendingFinesAmount
+   - CollectedLast30Days
+
+5. Top 5 borrowed books
+   - Title
+   - BorrowCount
+
+6. Top 5 active members
+   - MemberName
+   - LoanCount
+
+7. Most popular categories
+   - CategoryName
+   - LoanCount
+
+### Example Usage
+```sql
+EXEC GenerateLibraryStatistics;
+```
