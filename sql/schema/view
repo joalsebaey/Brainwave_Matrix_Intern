@@ -1,0 +1,79 @@
+CREATE VIEW AvailableBooks AS
+SELECT b.BookID, b.Title, b.ISBN, COUNT(bc.CopyID) AS AvailableCopies
+FROM Books b
+JOIN BookCopies bc ON b.BookID = bc.BookID
+WHERE bc.Status = 'Available'
+GROUP BY b.BookID, b.Title, b.ISBN;
+GO
+
+-- Create a view for overdue loans
+CREATE VIEW OverdueLoans AS
+SELECT l.LoanID, b.Title, m.FirstName, m.LastName, m.Email, 
+       l.CheckoutDate, l.DueDate, 
+       DATEDIFF(DAY, l.DueDate, GETDATE()) AS DaysOverdue
+FROM Loans l
+JOIN Books b ON l.BookID = b.BookID
+JOIN Members m ON l.MemberID = m.MemberID
+WHERE l.ReturnDate IS NULL AND l.DueDate < GETDATE();
+GO
+
+-- Create a trigger to update book status when borrowed
+CREATE TRIGGER AfterLoanInsert
+ON Loans
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    UPDATE b
+    SET Status = 'Borrowed'
+    FROM Books b
+    INNER JOIN inserted i ON b.BookID = i.BookID;
+END;
+GO
+
+-- Create a trigger to update book status when returned
+CREATE TRIGGER AfterLoanReturn
+ON Loans
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    IF UPDATE(ReturnDate)
+    BEGIN
+        UPDATE b
+        SET Status = 'Available'
+        FROM Books b
+        INNER JOIN inserted i ON b.BookID = i.BookID
+        WHERE i.ReturnDate IS NOT NULL AND i.Status = 'Returned';
+    END
+END;
+GO
+
+-- Create a trigger to auto-calculate fines for overdue books
+CREATE TRIGGER CalculateOverdueFine
+ON Loans
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    DECLARE @DaysLate INT
+    DECLARE @FineAmount DECIMAL(10,2)
+    
+    IF UPDATE(ReturnDate)
+    BEGIN
+        INSERT INTO Fines (LoanID, MemberID, Amount, IssuedDate)
+        SELECT 
+            i.LoanID, 
+            i.MemberID, 
+            DATEDIFF(DAY, i.DueDate, i.ReturnDate) * 1.00, -- $1 per day late
+            GETDATE()
+        FROM inserted i
+        WHERE i.ReturnDate IS NOT NULL 
+          AND i.ReturnDate > i.DueDate
+          AND NOT EXISTS (SELECT 1 FROM Fines WHERE LoanID = i.LoanID);
+    END
+END;
+GO
