@@ -32,6 +32,27 @@ The system implements the following tables:
 - Reservations
 - Fines
 - BookCopies
+# Feature Enhancements
+
+## Book Management:
+- **E-books and Digital Media Support**: Added support for managing e-books and other digital media formats, enhancing the library's digital collection and accessibility.
+- **Book Rating and Review System**: Users can now rate and review books, providing feedback and helping others discover popular titles.
+- **Book Availability Forecasting**: Integrated a forecasting system to predict book availability based on current reservation data, helping users plan better for future bookings.
+
+## Member Experience:
+- **Recommendation System**: A personalized recommendation engine has been implemented, suggesting books based on users' borrowing history to enhance the reading experience.
+- **Membership Cards with Barcodes/QR Codes**: Membership cards now include barcodes and QR codes for easy scanning during checkouts and account management.
+- **Notification System**: A notification system has been introduced, offering reminders via email or SMS for due dates and available reservations.
+
+## Payment Processing:
+- **Multiple Payment Methods**: We now support a variety of payment methods, including cash, credit cards, and online payment options, to give users more flexibility.
+- **Payment History Tracking**: Users can view and track their payment history, keeping all transaction details organized and accessible.
+- **Payment Receipts Generation**: Automated generation of payment receipts for users, providing an efficient and secure way to confirm transactions.
+
+## Reporting and Analytics:
+- **Advanced Library Usage Analytics**: Enhanced reporting capabilities that provide deeper insights into library usage patterns, helping management make data-driven decisions.
+- **Library Management Dashboards**: Dashboards have been created to provide an intuitive, real-time overview of library operations and key performance indicators.
+- **Data Export Functionality**: Users can now export data in CSV and Excel formats for further analysis or record-keeping.
 
 ## Getting Started
 
