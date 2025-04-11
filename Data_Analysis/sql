@@ -1,0 +1,446 @@
+-- 1. Circulation Analysis by Month
+CREATE PROCEDURE GetMonthlyCirculationStats
+    @Year INT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Default to current year if not specified
+    IF @Year IS NULL
+        SET @Year = YEAR(GETDATE());
+    
+    SELECT 
+        MONTH(CheckoutDate) AS Month,
+        DATENAME(MONTH, DATEADD(MONTH, MONTH(CheckoutDate) - 1, '1900-01-01')) AS MonthName,
+        COUNT(*) AS TotalLoans,
+        COUNT(DISTINCT MemberID) AS UniqueMembers,
+        COUNT(DISTINCT BookID) AS UniqueBooks
+    FROM Loans
+    WHERE YEAR(CheckoutDate) = @Year
+    GROUP BY MONTH(CheckoutDate), DATENAME(MONTH, DATEADD(MONTH, MONTH(CheckoutDate) - 1, '1900-01-01'))
+    ORDER BY Month;
+END
+GO
+
+-- 2. Book Popularity Analysis (FIXED)
+CREATE PROCEDURE GetBookPopularityStats 
+    @TopN INT = 10
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Most borrowed books
+    SELECT TOP(@TopN)
+        b.Title,
+        COUNT(l.LoanID) AS TotalBorrows,
+        AVG(DATEDIFF(DAY, l.CheckoutDate, ISNULL(l.ReturnDate, GETDATE()))) AS AvgDaysBorrowed,
+        STUFF((
+            SELECT ', ' + c.Name
+            FROM BookCategories bc2
+            JOIN Categories c ON bc2.CategoryID = c.CategoryID
+            WHERE bc2.BookID = b.BookID
+            FOR XML PATH('')), 1, 2, '') AS Categories
+    FROM Books b
+    JOIN Loans l ON b.BookID = l.BookID
+    JOIN BookCategories bc ON b.BookID = bc.BookID
+    JOIN Categories c ON bc.CategoryID = c.CategoryID
+    GROUP BY b.BookID, b.Title
+    ORDER BY COUNT(l.LoanID) DESC;
+    
+    -- Most reserved books
+    SELECT TOP(@TopN)
+        b.Title,
+        COUNT(r.ReservationID) AS TotalReservations
+    FROM Books b
+    JOIN Reservations r ON b.BookID = r.BookID
+    GROUP BY b.BookID, b.Title
+    ORDER BY COUNT(r.ReservationID) DESC;
+    
+    -- Books with longest waiting times (from reservation to fulfillment)
+    SELECT TOP(@TopN)
+        b.Title,
+        AVG(DATEDIFF(DAY, r.ReservationDate, l.CheckoutDate)) AS AvgWaitingDays
+    FROM Books b
+    JOIN Reservations r ON b.BookID = r.BookID
+    JOIN Loans l ON r.BookID = l.BookID AND r.MemberID = l.MemberID
+    WHERE r.Status = 'Fulfilled'
+      AND l.CheckoutDate > r.ReservationDate
+    GROUP BY b.BookID, b.Title
+    ORDER BY AVG(DATEDIFF(DAY, r.ReservationDate, l.CheckoutDate)) DESC;
+END
+GO
+
+-- 3. Category Popularity Analysis
+CREATE PROCEDURE GetCategoryPopularityStats
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT 
+        c.Name AS Category,
+        COUNT(l.LoanID) AS TotalLoans,
+        COUNT(DISTINCT b.BookID) AS UniqueBooks,
+        COUNT(DISTINCT l.MemberID) AS UniqueMembers,
+        CAST(COUNT(l.LoanID) AS FLOAT) / NULLIF(COUNT(DISTINCT b.BookID), 0) AS LoansPerBook
+    FROM Categories c
+    JOIN BookCategories bc ON c.CategoryID = bc.CategoryID
+    JOIN Books b ON bc.BookID = b.BookID
+    JOIN Loans l ON b.BookID = l.BookID
+    GROUP BY c.CategoryID, c.Name
+    ORDER BY COUNT(l.LoanID) DESC;
+END
+GO
+
+-- 4. Member Activity Analysis (FIXED)
+CREATE PROCEDURE GetMemberActivityStats
+    @TopN INT = 10
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Most active members (by number of loans)
+    SELECT TOP(@TopN)
+        m.MemberID,
+        m.FirstName + ' ' + m.LastName AS MemberName,
+        COUNT(l.LoanID) AS TotalLoans,
+        COUNT(DISTINCT b.BookID) AS UniqueBooks,
+        STUFF((
+            SELECT TOP 3 ', ' + c.Name 
+            FROM Loans l2
+            JOIN Books b2 ON l2.BookID = b2.BookID
+            JOIN BookCategories bc2 ON b2.BookID = bc2.BookID
+            JOIN Categories c ON bc2.CategoryID = c.CategoryID
+            WHERE l2.MemberID = m.MemberID
+            GROUP BY c.Name
+            ORDER BY COUNT(*) DESC
+            FOR XML PATH('')), 1, 2, '') AS FavoriteCategories
+    FROM Members m
+    JOIN Loans l ON m.MemberID = l.MemberID
+    JOIN Books b ON l.BookID = b.BookID
+    JOIN BookCategories bc ON b.BookID = bc.BookID
+    JOIN Categories c ON bc.CategoryID = c.CategoryID
+    GROUP BY m.MemberID, m.FirstName, m.LastName
+    ORDER BY COUNT(l.LoanID) DESC;
+    
+    -- Members with highest fine amounts
+    SELECT TOP(@TopN)
+        m.MemberID,
+        m.FirstName + ' ' + m.LastName AS MemberName,
+        SUM(f.Amount) AS TotalFines,
+        COUNT(DISTINCT f.FineID) AS FineCount,
+        MAX(f.Amount) AS LargestFine
+    FROM Members m
+    JOIN Fines f ON m.MemberID = f.MemberID
+    GROUP BY m.MemberID, m.FirstName, m.LastName
+    ORDER BY SUM(f.Amount) DESC;
+    
+    -- Members with most overdue books
+    SELECT TOP(@TopN)
+        m.MemberID,
+        m.FirstName + ' ' + m.LastName AS MemberName,
+        COUNT(l.LoanID) AS OverdueCount,
+        AVG(DATEDIFF(DAY, l.DueDate, GETDATE())) AS AvgDaysOverdue
+    FROM Members m
+    JOIN Loans l ON m.MemberID = l.MemberID
+    WHERE l.Status = 'Overdue'
+    GROUP BY m.MemberID, m.FirstName, m.LastName
+    ORDER BY COUNT(l.LoanID) DESC;
+END
+GO
+
+-- 5. Staff Performance Analysis
+CREATE PROCEDURE GetStaffPerformanceStats
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    SELECT 
+        s.StaffID,
+        s.FirstName + ' ' + s.LastName AS StaffName,
+        s.Position,
+        COUNT(l.LoanID) AS ProcessedLoans,
+        COUNT(DISTINCT CONVERT(DATE, l.CheckoutDate)) AS WorkingDays,
+        CAST(COUNT(l.LoanID) AS FLOAT) / NULLIF(COUNT(DISTINCT CONVERT(DATE, l.CheckoutDate)), 0) AS LoansPerWorkday
+    FROM Staff s
+    JOIN Loans l ON s.StaffID = l.StaffID
+    GROUP BY s.StaffID, s.FirstName, s.LastName, s.Position
+    ORDER BY COUNT(l.LoanID) DESC;
+END
+GO
+
+-- 6. Collection Age Analysis (FIXED)
+CREATE PROCEDURE GetCollectionAgeAnalysis
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    WITH BookAgeData AS (
+        SELECT 
+            b.BookID,
+            b.Title,
+            CASE
+                WHEN YEAR(b.PublicationDate) >= YEAR(GETDATE()) - 1 THEN 'New (< 2 years)'
+                WHEN YEAR(b.PublicationDate) >= YEAR(GETDATE()) - 5 THEN 'Recent (2-5 years)'
+                WHEN YEAR(b.PublicationDate) >= YEAR(GETDATE()) - 10 THEN 'Modern (6-10 years)'
+                WHEN YEAR(b.PublicationDate) >= YEAR(GETDATE()) - 20 THEN 'Contemporary (11-20 years)'
+                ELSE 'Classic (> 20 years)'
+            END AS AgeCategory,
+            bc.CopyID,
+            l.LoanID
+        FROM Books b
+        LEFT JOIN BookCopies bc ON b.BookID = bc.BookID
+        LEFT JOIN Loans l ON b.BookID = l.BookID
+        WHERE b.PublicationDate IS NOT NULL
+    )
+    SELECT 
+        AgeCategory,
+        COUNT(DISTINCT BookID) AS BookCount,
+        COUNT(CopyID) AS CopyCount,
+        COUNT(LoanID) AS TotalLoans,
+        CAST(COUNT(LoanID) AS FLOAT) / NULLIF(COUNT(DISTINCT BookID), 0) AS LoansPerBook
+    FROM BookAgeData
+    GROUP BY AgeCategory
+    ORDER BY 
+        CASE AgeCategory
+            WHEN 'New (< 2 years)' THEN 1
+            WHEN 'Recent (2-5 years)' THEN 2
+            WHEN 'Modern (6-10 years)' THEN 3
+            WHEN 'Contemporary (11-20 years)' THEN 4
+            WHEN 'Classic (> 20 years)' THEN 5
+        END;
+END
+GO
+
+-- 7. Loan Duration Analysis (FIXED)
+CREATE PROCEDURE GetLoanDurationAnalysis
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Average loan duration by category
+    SELECT 
+        c.Name AS Category,
+        AVG(DATEDIFF(DAY, l.CheckoutDate, ISNULL(l.ReturnDate, GETDATE()))) AS AvgLoanDurationDays,
+        MIN(DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate)) AS MinLoanDurationDays,
+        MAX(DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate)) AS MaxLoanDurationDays
+    FROM Categories c
+    JOIN BookCategories bc ON c.CategoryID = bc.CategoryID
+    JOIN Books b ON bc.BookID = b.BookID
+    JOIN Loans l ON b.BookID = l.BookID
+    WHERE l.ReturnDate IS NOT NULL
+    GROUP BY c.CategoryID, c.Name
+    ORDER BY AVG(DATEDIFF(DAY, l.CheckoutDate, ISNULL(l.ReturnDate, GETDATE()))) DESC;
+    
+    -- Distribution of loan durations
+    WITH DurationRanges AS (
+        SELECT 
+            CASE
+                WHEN DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate) <= 7 THEN '0-7 days'
+                WHEN DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate) <= 14 THEN '8-14 days'
+                WHEN DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate) <= 21 THEN '15-21 days'
+                WHEN DATEDIFF(DAY, l.CheckoutDate, l.ReturnDate) <= 30 THEN '22-30 days'
+                ELSE 'Over 30 days'
+            END AS DurationRange
+        FROM Loans l
+        WHERE l.ReturnDate IS NOT NULL
+    )
+    SELECT 
+        DurationRange,
+        COUNT(*) AS LoanCount,
+        CAST(COUNT(*) AS FLOAT) / (SELECT COUNT(*) FROM Loans WHERE ReturnDate IS NOT NULL) * 100 AS PercentageOfTotal
+    FROM DurationRanges
+    GROUP BY DurationRange
+    ORDER BY 
+        CASE DurationRange
+            WHEN '0-7 days' THEN 1
+            WHEN '8-14 days' THEN 2
+            WHEN '15-21 days' THEN 3
+            WHEN '22-30 days' THEN 4
+            WHEN 'Over 30 days' THEN 5
+        END;
+END
+GO
+
+-- 8. Fine Analysis
+CREATE PROCEDURE GetFineAnalysis
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Total fines generated vs collected
+    SELECT 
+        SUM(Amount) AS TotalFinesGenerated,
+        SUM(CASE WHEN Status = 'Paid' THEN Amount ELSE 0 END) AS TotalFinesCollected,
+        SUM(CASE WHEN Status = 'Pending' THEN Amount ELSE 0 END) AS TotalFinesPending,
+        SUM(CASE WHEN Status = 'Waived' THEN Amount ELSE 0 END) AS TotalFinesWaived,
+        CAST(SUM(CASE WHEN Status = 'Paid' THEN Amount ELSE 0 END) AS FLOAT) / 
+            NULLIF(SUM(Amount), 0) * 100 AS CollectionRate
+    FROM Fines;
+    
+    -- Fines by month
+    SELECT 
+        YEAR(IssuedDate) AS Year,
+        MONTH(IssuedDate) AS Month,
+        DATENAME(MONTH, DATEADD(MONTH, MONTH(IssuedDate) - 1, '1900-01-01')) AS MonthName,
+        SUM(Amount) AS TotalFines,
+        COUNT(*) AS FineCount,
+        AVG(Amount) AS AvgFineAmount
+    FROM Fines
+    GROUP BY YEAR(IssuedDate), MONTH(IssuedDate), 
+             DATENAME(MONTH, DATEADD(MONTH, MONTH(IssuedDate) - 1, '1900-01-01'))
+    ORDER BY Year, Month;
+END
+GO
+
+-- 9. Inventory Health Analysis
+CREATE PROCEDURE GetInventoryHealthAnalysis
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Books with low availability
+    SELECT 
+        b.Title,
+        COUNT(bc.CopyID) AS TotalCopies,
+        SUM(CASE WHEN bc.Status = 'Available' THEN 1 ELSE 0 END) AS AvailableCopies,
+        CAST(SUM(CASE WHEN bc.Status = 'Available' THEN 1 ELSE 0 END) AS FLOAT) / 
+            NULLIF(COUNT(bc.CopyID), 0) * 100 AS AvailabilityPercentage,
+        COUNT(l.LoanID) AS TotalLoans,
+        COUNT(r.ReservationID) AS ActiveReservations
+    FROM Books b
+    JOIN BookCopies bc ON b.BookID = bc.BookID
+    LEFT JOIN Loans l ON b.BookID = l.BookID
+    LEFT JOIN Reservations r ON b.BookID = r.BookID AND r.Status = 'Pending'
+    GROUP BY b.BookID, b.Title
+    HAVING COUNT(bc.CopyID) > 0 AND 
+           CAST(SUM(CASE WHEN bc.Status = 'Available' THEN 1 ELSE 0 END) AS FLOAT) / 
+            NULLIF(COUNT(bc.CopyID), 0) * 100 < 30  -- Less than 30% available
+    ORDER BY CAST(SUM(CASE WHEN bc.Status = 'Available' THEN 1 ELSE 0 END) AS FLOAT) / 
+            NULLIF(COUNT(bc.CopyID), 0) * 100;
+    
+    -- Lost or damaged books
+    SELECT 
+        YEAR(l.CheckoutDate) AS Year,
+        COUNT(CASE WHEN l.Status = 'Lost' THEN 1 END) AS LostBooks,
+        COUNT(CASE WHEN bc.Status = 'Under Repair' THEN 1 END) AS DamagedBooks,
+        (COUNT(CASE WHEN l.Status = 'Lost' THEN 1 END) + 
+         COUNT(CASE WHEN bc.Status = 'Under Repair' THEN 1 END)) AS TotalIssues,
+        (SELECT COUNT(*) FROM BookCopies) AS TotalInventory,
+        CAST((COUNT(CASE WHEN l.Status = 'Lost' THEN 1 END) + 
+             COUNT(CASE WHEN bc.Status = 'Under Repair' THEN 1 END)) AS FLOAT) / 
+             NULLIF((SELECT COUNT(*) FROM BookCopies), 0) * 100 AS PercentageAffected
+    FROM Loans l
+    FULL OUTER JOIN BookCopies bc ON 1=1  -- Just to get all books in both tables
+    GROUP BY YEAR(l.CheckoutDate)
+    ORDER BY Year;
+END
+GO
+
+-- 10. Seasonal Trend Analysis (FIXED)
+CREATE PROCEDURE GetSeasonalTrendAnalysis
+AS
+BEGIN
+    SET NOCOUNT ON;
+    
+    -- Activity by season
+    SELECT 
+        CASE
+            WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+            WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+            WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+            WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+        END AS Season,
+        COUNT(*) AS TotalLoans,
+        COUNT(DISTINCT l.MemberID) AS UniqueMembers,
+        COUNT(DISTINCT b.BookID) AS UniqueBooks,
+        -- Use STUFF to build a comma-separated list of top categories
+        STUFF((
+            SELECT TOP 5 ', ' + c.Name
+            FROM (
+                SELECT c2.CategoryID, c2.Name, COUNT(*) AS CategoryCount
+                FROM Loans l2
+                JOIN Books b2 ON l2.BookID = b2.BookID
+                JOIN BookCategories bc2 ON b2.BookID = bc2.BookID
+                JOIN Categories c2 ON bc2.CategoryID = c2.CategoryID
+                WHERE CASE
+                        WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+                        WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+                        WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+                        WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+                      END = CASE
+                              WHEN MONTH(l2.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+                              WHEN MONTH(l2.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+                              WHEN MONTH(l2.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+                              WHEN MONTH(l2.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+                            END
+                GROUP BY c2.CategoryID, c2.Name
+            ) AS TopCats
+            JOIN Categories c ON TopCats.CategoryID = c.CategoryID
+            ORDER BY TopCats.CategoryCount DESC
+            FOR XML PATH('')), 1, 2, '') AS TopCategories
+    FROM Loans l
+    JOIN Books b ON l.BookID = b.BookID
+    JOIN BookCategories bc ON b.BookID = bc.BookID
+    JOIN Categories c ON bc.CategoryID = c.CategoryID
+    GROUP BY 
+        CASE
+            WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+            WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+            WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+            WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+        END
+    ORDER BY 
+        CASE Season
+            WHEN 'Winter' THEN 1
+            WHEN 'Spring' THEN 2
+            WHEN 'Summer' THEN 3
+            WHEN 'Fall' THEN 4
+        END;
+    
+    -- Most popular categories by season
+    WITH SeasonalCategories AS (
+        SELECT 
+            CASE
+                WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+                WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+                WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+                WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+            END AS Season,
+            c.Name AS Category,
+            COUNT(*) AS LoanCount,
+            ROW_NUMBER() OVER (
+                PARTITION BY 
+                    CASE
+                        WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+                        WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+                        WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+                        WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+                    END
+                ORDER BY COUNT(*) DESC
+            ) AS CategoryRank
+        FROM Loans l
+        JOIN Books b ON l.BookID = b.BookID
+        JOIN BookCategories bc ON b.BookID = bc.BookID
+        JOIN Categories c ON bc.CategoryID = c.CategoryID
+        GROUP BY 
+            CASE
+                WHEN MONTH(l.CheckoutDate) IN (12, 1, 2) THEN 'Winter'
+                WHEN MONTH(l.CheckoutDate) IN (3, 4, 5) THEN 'Spring'
+                WHEN MONTH(l.CheckoutDate) IN (6, 7, 8) THEN 'Summer'
+                WHEN MONTH(l.CheckoutDate) IN (9, 10, 11) THEN 'Fall'
+            END,
+            c.Name
+    )
+    SELECT Season, Category, LoanCount, CategoryRank
+    FROM SeasonalCategories
+    WHERE CategoryRank <= 3  -- Top 3 categories per season
+    ORDER BY 
+        CASE Season
+            WHEN 'Winter' THEN 1
+            WHEN 'Spring' THEN 2
+            WHEN 'Summer' THEN 3
+            WHEN 'Fall' THEN 4
+        END, 
+        CategoryRank;
+END
+GO
