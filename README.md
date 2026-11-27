@@ -95,7 +95,7 @@ EXEC GenerateLibraryStatistics;
 
 ## Documentation
 
-For detailed documentation on tables, stored procedures, and example queries, see the [Documentation](docs/README.md) directory.
+For detailed documentation on tables, stored procedures, and example queries, see the [Documentation](documentation/) directory.
 
 ## Contributing
 
